@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Zemax Temporary Files
+*.ZDA
+*.ZMX.LOCK
+*.ZDO
+*.ZOS
+*.ZAR
+*.ZMX.BAK
+temp_spot_report*.txt
+temp_spot.txt
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/

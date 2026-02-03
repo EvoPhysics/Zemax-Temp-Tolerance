@@ -23,7 +23,6 @@
 ├── 05_Data_Harvest_Random.py        # [数据] 批量采集 200 组随机温度数据
 ├── 06_Model_Training_Linear.py      # [AI] 训练多项式回归模型并评估
 ├── 07_Model_Prediction.py           # [AI] 使用模型预测特定温度 (如 73.5°C) 的结果
-├── 99_Tools_Generate_Images.py      # [辅助] 生成代码截图
 ├── models/                          # [资源] 透镜文件与数据集
 │   ├── Cooke_Triplet_Base.zmx       # 基础柯克三片式镜头文件
 │   └── dataset_v1.csv               # 采集到的温度-光斑数据集

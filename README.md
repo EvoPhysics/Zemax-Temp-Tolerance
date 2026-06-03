@@ -1,85 +1,147 @@
-# 基于 Python ZOS-API 的 Zemax 自动化热分析与 AI 预测
+# Zemax 自动化热分析与公差预测 | Automated Zemax Thermal & Tolerance Analysis
 
-本项目展示了如何结合 **Zemax OpticStudio API (ZOS-API)** 与 **Python** 进行自动化的光学系统热分析与公差分析。我们不仅实现了自动化的数据采集，还利用机器学习（MLP 神经网络）建立了高精度的光斑预测模型，实现了“虚拟 Zemax”的毫秒级推理。
+> 基于 ZOS-API 与 Scikit-Learn MLP 神经网络的 Cooke 三片镜热-公差耦合建模与毫秒级光斑预测。
+> Cooke triplet thermal-tolerance coupled modeling and millisecond-level spot prediction powered by ZOS-API and a Scikit-Learn MLP.
 
-## 🌟 核心功能
+---
 
-1.  **自动化连接**：自动连接到正在运行的 Zemax OpticStudio 实例。
-2.  **热分析扫描**：
-    *   支持标准的 3 点热分析（20°C, 50°C, 80°C）。
-    *   支持自定义范围（如 0°C - 100°C）的全自动温度扫描。
-3.  **蒙特卡洛公差分析 (Monte Carlo Tolerance)**：
-    *   **热+公差耦合**：模拟真实的物理环境，同时考虑**温度变化**与**装配公差**（透镜的偏心 Decenter 与倾斜 Tilt）。
-    *   **自动化建模**：脚本自动在透镜前后插入 Coordinate Break 表面，并设置 Pickup Solve。
-    *   **自动对焦**：模拟实际装调过程，每次扰动后自动执行 Quick Focus。
-4.  **数据采集 (The Harvest)**：批量生成随机工况，自动运行仿真并采集 RMS 光斑半径数据。
-5.  **AI 建模与预测**：
-    *   **MLP 神经网络**：使用 Scikit-Learn 搭建多层感知机（13 -> 64 -> 64 -> 1）。
-    *   **高精度**：在“热+公差”复杂工况下，模型 R2 Score 达到 **0.989**，MSE 仅为 **2.53**。
+## 🌟 核心功能 | Core Features
 
-## 📂 项目结构
+- 🔌 **ZOS-API 自动化连接 | Automated ZOS-API Connection** — 从 Windows 注册表定位 Zemax 根目录，加载 `ZOSAPI_NetHelper.dll`，校验 API 许可证后建立独立进程连接。
+  *Locates Zemax via Windows registry, loads the .NET helper, validates the API license, and spawns a standalone process.*
+
+- 🌡️ **多模式热分析 | Multi-Mode Thermal Analysis** — 支持标准三点（20°C / 50°C / 80°C）以及 0–100°C 全范围 10°C 步长扫描，并自动读取 SCHOTT 等材料库的热数据（TCE、D0、dn/dT）。
+  *Supports the canonical 3-point sweep and a full 0–100°C scan in 10°C steps; auto-loads SCHOTT thermal constants (TCE, D0, dn/dT).*
+
+- 🎲 **蒙特卡洛热+公差耦合 | Monte Carlo Thermal + Tolerance Coupling** — 在每片透镜前后自动插入 Coordinate Break 与 Pickup Solve，叠加 12 自由度（D<sub>x</sub>, D<sub>y</sub>, T<sub>x</sub>, T<sub>y</sub> × 3）与温度扰动，1000 次随机仿真。
+  *Inserts Coordinate Breaks with Pickup Solves around each element, perturbs 12 DOF (D<sub>x</sub>, D<sub>y</sub>, T<sub>x</sub>, T<sub>y</sub> for 3 lenses) plus temperature, runs 1000 random trials.*
+
+- 🧠 **13 维 MLP 回归 | 13-D MLP Regressor** — Scikit-Learn `MLPRegressor` 结构 `13 → 64 → 64 → 1`，输入标准化后 Adam 训练，毫秒级推理替代 Zemax 光线追迹。
+  *Scikit-Learn `MLPRegressor` with architecture `13 → 64 → 64 → 1`, trained with Adam on standardized inputs; inference runs in milliseconds.*
+
+- 📈 **高保真数据集 | High-Fidelity Datasets** — 自动采集 V1（200 组纯温度）与 V2（1000 组热+公差）双版本 CSV，覆盖 −40°C ~ 85°C 工业温区。
+  *Auto-harvests two CSV datasets: V1 (200 temperature-only samples) and V2 (1000 thermal+tolerance samples), covering −40°C to 85°C industrial range.*
+
+- 🧪 **闭环验证 | Closed-Loop Verification** — 支持将数据集中特定工况回写为 `.zmx` 文件，可在 Zemax 中手动打开对比 AI 预测值与真实光线追迹结果。
+  *Reproduces any dataset case as a `.zmx` lens file so engineers can open it in Zemax and compare AI prediction against ground-truth ray tracing.*
+
+---
+
+## 📂 项目结构 | Project Structure
 
 ```
-.
-├── 01_System_Connection.py          # [基础] 测试 ZOS-API 连接
-├── 02_Thermal_Analysis_3Point.py    # [仿真] 标准 3 点热分析
-├── 03_Thermal_Analysis_Sweep_Full.py# [仿真] 0-100°C 全范围迭代扫描
-├── 04_Debug_Material_Catalog.py     # [工具] 验证内部材料库热数据读取
-├── 05_Data_Harvest_Random.py        # [数据] 批量采集 200 组随机温度数据 (V1)
-├── 06_Model_Training_Linear.py      # [AI] 训练多项式回归模型 (V1)
-├── 07_Model_Prediction.py           # [AI] V1 模型预测脚本
-├── 08_Monte_Carlo_Tolerance.py      # [仿真] 蒙特卡洛公差分析 (生成 dataset_v2)
-├── 09_Model_Training_Sklearn_MLP.py # [AI] 训练 MLP 神经网络拟合复杂公差数据
-├── 10_Generate_Verification_ZMX.py  # [工具] 生成特定工况的 ZMX 文件以供人工验证
-├── models/                          # [资源] 透镜文件、数据集与模型权重
-│   ├── Cooke_Triplet_Base.zmx       # 基础镜头文件
-│   ├── dataset_v2_tolerance.csv     # 1000组 热+公差 仿真数据
-│   ├── optical_mlp_sklearn.pkl      # 训练好的神经网络模型
-│   └── input_scaler.pkl             # 输入数据标准化器
-├── images/                          # [资源] 结果图表
-└── README.md                        # 项目说明文档
+Zemax-Temp-Tolerance/
+├── 01_System_Connection.py          # [基础] ZOS-API 连接测试 / Connectivity check
+├── 02_Thermal_Analysis_3Point.py    # [仿真] 3 点热分析 (20/50/80°C) / 3-point thermal analysis
+├── 03_Thermal_Analysis_Sweep_Full.py# [仿真] 0-100°C 全范围扫描 / Full 0-100°C sweep
+├── 04_Debug_Material_Catalog.py     # [工具] 材料库热数据校验 / Material catalog verification
+├── 05_Data_Harvest_Random.py        # [数据] 随机 200 组温度数据 (V1) / V1 dataset
+├── 06_Model_Training_Linear.py      # [AI] 多项式回归 (V1) / Polynomial regression
+├── 07_Model_Prediction.py           # [AI] V1 模型推理 / V1 inference
+├── 08_Monte_Carlo_Tolerance.py      # [仿真] 1000 组蒙特卡洛 (V2) / 1000-run Monte Carlo
+├── 09_Model_Training_Sklearn_MLP.py # [AI] MLP 神经网络训练 / MLP training
+├── 10_Generate_Verification_ZMX.py  # [工具] 验证用例 ZMX 导出 / Verification .zmx export
+├── models/                          # [资源] 透镜、训练集、模型权重
+│   ├── Cooke_Triplet_Base.zmx       # 基础镜头 / base lens
+│   ├── dataset_v1.csv               # 200 组纯温度数据 / 200-sample temperature dataset
+│   ├── dataset_v2_tolerance.csv     # 1000 组 热+公差 数据 / 1000-sample thermal+tolerance dataset
+│   ├── optical_mlp_sklearn.pkl      # 训练好的 MLP 模型 / trained MLP
+│   └── input_scaler.pkl             # 输入标准化器 / input StandardScaler
+├── images/                          # [资源] 训练曲线与散点图 / Plots and figures
+└── README.md                        # 本文件 / this file
 ```
 
-## 🛠️ 环境要求
+---
 
-*   **Zemax OpticStudio**: Professional 或 Premium 版本（需支持 API）。
-*   **Python**: 3.7+ (推荐使用 Anaconda)
-*   **依赖库**:
-    ```bash
-    pip install pythonnet pandas numpy scikit-learn matplotlib
-    ```
+## 🛠 环境要求 | Requirements
 
-## 🚀 快速开始
+| 项目 / Item | 要求 / Requirement |
+|---|---|
+| 操作系统 / OS | Windows 10 / 11（ZOS-API 仅支持 Windows） |
+| Zemax OpticStudio | Professional 或 Premium 版本（需启用 API 许可） |
+| Python | 3.7+ （推荐 Anaconda） |
+| 关键依赖 / Key deps | `pythonnet` `pandas` `numpy` `scikit-learn` `matplotlib` `joblib` |
+| 镜头基准 / Lens | 自带 `Cooke_Triplet_Base.zmx`（40° 视场） |
 
-### 1. 准备工作
-打开 Zemax OpticStudio 并确保处于交互模式（Interactive Mode）。
+安装依赖 / Install dependencies:
 
-### 2. 运行蒙特卡洛仿真
 ```bash
-# 运行 1000 次蒙特卡洛分析 (热+公差)
-# 自动生成 dataset_v2_tolerance.csv
+pip install pythonnet pandas numpy scikit-learn matplotlib joblib
+```
+
+---
+
+## 🚀 快速开始 | Quick Start
+
+三步跑通从仿真到 AI 预测的完整链路。  
+*Three steps from simulation to AI prediction.*
+
+### Step 1 · 准备 Zemax | Prepare Zemax
+打开 Zemax OpticStudio 并保持交互模式（不要用独占模式）。  
+*Launch Zemax OpticStudio in Interactive (non-exclusive) mode.*
+
+### Step 2 · 跑 1000 组蒙特卡洛 | Run 1000 Monte Carlo Trials
+```bash
 python 08_Monte_Carlo_Tolerance.py
+# 输出 models/dataset_v2_tolerance.csv (Temp + 12 DOF + RMS_Spot)
 ```
+*This populates `dataset_v2_tolerance.csv` with 1000 rows: 1 temperature + 12 tolerance DOF + RMS spot radius.*
 
-### 3. 训练 AI 模型
+### Step 3 · 训练 MLP 神经网络 | Train the MLP
 ```bash
-# 训练 MLP 神经网络
-# 输出 R2 Score 并保存模型至 models/
 python 09_Model_Training_Sklearn_MLP.py
+# 输出 R² / MSE, 保存 optical_mlp_sklearn.pkl + input_scaler.pkl
+```
+*Prints R² and MSE, dumps the trained model and scaler to `models/`.*
+
+> 💡 想验证 AI 是否靠谱？运行 `10_Generate_Verification_ZMX.py` 会在 `models/Verification_Case_2.zmx` 写出一个可手动打开的镜头文件。  
+> *To sanity-check the model, run `10_Generate_Verification_ZMX.py` — it writes `models/Verification_Case_2.zmx` that you can open in Zemax.*
+
+---
+
+## 📊 关键成果 | Key Results
+
+| 指标 / Metric | 数值 / Value | 含义 / Meaning |
+|---|---|---|
+| 数据集规模 / Dataset size | **1000 组 / runs** | V2 蒙特卡洛热+公差仿真 / V2 Monte Carlo |
+| 输入维度 / Input dim | **13** | 1 温度 + 3 透镜 × 4 公差 / 1 temp + 3 lenses × 4 DOF |
+| MLP 结构 / MLP arch | **13 → 64 → 64 → 1** | 两层隐藏层 ReLU / two hidden ReLU layers |
+| R² Score（测试集 / test set） | **0.989** | 方差解释率 / variance explained |
+| MSE（测试集 / test set） | **2.53** µm² | 均方误差 / mean squared error |
+| 推理耗时 / Inference | **毫秒级 / ms-level** | 替代 Zemax 光线追迹 / replaces ray tracing |
+| 温区 / Range | **−40°C ~ 85°C** | 工业级 / industrial-grade |
+
+> 对比基线：纯温度 1 维多项式回归（R² ≈ 0.9）已不足以刻画多自由度耦合效应，MLP 把 12 个公差维度也压进了 0.989 R² 的同一网络。  
+> *Pure-temperature 1-D polynomial regression (R² ≈ 0.9) under-fits the multi-DOF coupling; the MLP lifts 12 extra tolerance dimensions into the same 0.989 R² surface.*
+
+---
+
+## 📚 引用 | Citation
+
+如果本项目对你的研究或工程有帮助，请引用：  
+*If this project helps your research or engineering work, please cite:*
+
+```bibtex
+@software{zemax_temp_tolerance_2026,
+  author    = {EvoPhysics},
+  title     = {{Zemax-Temp-Tolerance}: Automated Thermal and Tolerance Analysis
+               of Cooke Triplet via {ZOS-API} and {Scikit-Learn} {MLP}},
+  year      = {2026},
+  version   = {1.0.0},
+  url       = {https://github.com/EvoPhysics/Zemax-Temp-Tolerance},
+  note      = {Cooke triplet; 1000-run Monte Carlo; R\textsuperscript{2}=0.989; MSE=2.53}
+}
 ```
 
-### 4. 验证结果
-```bash
-# 生成特定工况的 ZMX 文件 (Verification_Case_2.zmx)
-# 你可以在 Zemax 中打开此文件，对比 AI 预测值与 Zemax 真实仿真值
-python 10_Generate_Verification_ZMX.py
-```
+---
 
-## 📊 关键成果
+## 📝 License
 
-*   **复杂物理场模拟**：成功实现了 Python 对 Zemax 坐标断点（Coordinate Break）和求解类型（Solve Type）的深度控制，模拟了真实的装配误差。
-*   **AI 替代仿真**：对于包含 13 个自由度（温度 + 12个公差变量）的复杂系统，神经网络模型（R2=0.989）可以替代耗时的光线追迹，实现毫秒级性能评估。
+本项目基于 **MIT License** 开源 — 详见 `LICENSE` 文件（如未随附请在根目录创建）。  
+*Released under the **MIT License** — see `LICENSE` (create it at the repo root if not present).*
 
-## 📝 许可证
+---
 
-MIT License
+<p align="center">
+  <sub>Built with care by the EvoPhysics team · 用心做光学 · 2026</sub>
+</p>
